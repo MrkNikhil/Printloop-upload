@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Printloop – Upload</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    .upload-container { max-width: 400px; margin: auto; }
+    label { display: block; margin-top: 15px; }
+    button { margin-top: 15px; padding: 10px; }
+    #confirmation { margin-top: 20px; font-weight: bold; }
+    .success { color: green; }
+    .error { color: red; }
+  </style>
+</head>
+<body>
+  <div class="upload-container">
+    <h1>Upload Your Document</h1>
+    <form id="uploadForm">
+      <label for="file">Choose a file (PDF or DOCX):</label>
+      <input type="file" id="file" name="file" accept=".pdf,.docx" required />
+
+      <label for="copies">Number of copies:</label>
+      <input type="number" id="copies" name="copies" min="1" max="50" required />
+
+      <label for="location">Select a café:</label>
+      <select id="location" name="location" required>
+        <option value="">--Choose a location--</option>
+        <option value="Cafe Aroma">Cafe Aroma</option>
+        <option value="PrintHub Express">PrintHub Express</option>
+        <option value="Stationery Stop">Stationery Stop</option>
+        <option value="mrkprinthub">mrkprinthub</option>
+        <option value="Sunrise cybercafe">Sunrise cybercafe</option>
+      </select>
+
+      <button type="submit">Submit</button>
+    </form>
+    <h2 class="mt-6 mb-2 text-xl font-bold">Thanks for using Printloop</h2>
+
+<div id="ordersPlaceholder">
+  <!-- Orders table removed for now -->
+</div>
+
+    <div id="confirmation"></div>
+  </div>
+
+
+  <!-- Supabase SDK -->
+  <script type="module">
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
+
+    // ✅ Your Supabase credentials
+    const supabaseUrl = 'https://brfdigpeljuhsbuwypep.supabase.co'
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJyZmRpZ3BlbGp1aHNidXd5cGVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUwOTU5NzAsImV4cCI6MjA3MDY3MTk3MH0.990SplbtfeoeCiTgrAMDN0Iyl6dYeECDyKLjL6hfoGA'   // ⚠️ use anon key, not service role key
+    const supabase = createClient(supabaseUrl, supabaseKey)
+
+    const form = document.getElementById('uploadForm')
+    const confirmation = document.getElementById('confirmation')
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault() // prevent page reload
+
+      confirmation.textContent = "Uploading..."
+      confirmation.className = ""
+
+      const file = document.getElementById('file').files[0]
+      const copies = document.getElementById('copies').value
+      const location = document.getElementById('location').value
+
+      if (!file) {
+        confirmation.textContent = "Please select a file."
+        confirmation.className = "error"
+        return
+      }
+      // Fetch and display orders
+async function loadOrders() {
+    console.log("loadOrders() called...");
+
+    let { data, error } = await supabase
+        .from("orders")
+        .select("id, file_url, copies, Cafe_name, Created_at")
+        .order("Created_at", { ascending: false });
+
+    if (error) {
+        console.error("Error fetching orders:", error);
+        return;
+    }
+
+    console.log("Fetched data:", data);
+
+    const tbody = document.querySelector("#ordersTable tbody");
+    console.log("tbody found?", tbody);
+
+    tbody.innerHTML = "";
+
+    data.forEach(order => {
+        const tr = document.createElement("tr");
+
+        tr.innerHTML = `
+            <td>${order.id}</td>
+            <td><a href="${order.file_url}" target="_blank">View File</a></td>
+            <td>${order.copies}</td>
+            <td>${order.Cafe_name}</td>
+            <td>${new Date(order.Created_at).toLocaleString()}</td>
+        `;
+
+        tbody.appendChild(tr);
+    });
+
+    console.log("Orders rendered successfully!");
+}
+
+
+// Run loadOrders() once the page has loaded
+document.addEventListener('DOMContentLoaded', loadOrders);
+
+
+      // ✅ Step 1: Upload file to storage
+      const filePath = `${Date.now()}-${file.name}`
+      const { data: uploadData, error: uploadError } = await supabase
+        .storage
+        .from('uploads')  // make sure this bucket exists
+        .upload(filePath, file)
+
+      if (uploadError) {
+        console.error(uploadError)
+        confirmation.textContent = "File upload failed."
+        confirmation.className = "error"
+        return
+      }
+
+      // ✅ Step 2: Get public URL
+      const { data: publicUrlData } = supabase
+        .storage
+        .from('uploads')
+        .getPublicUrl(filePath)
+
+      const fileUrl = publicUrlData.publicUrl
+
+      // ✅ Step 3: Insert into Orders table
+      const { data: insertData, error: insertError } = await supabase
+        .from('Orders')
+        .insert([
+          {
+            file_url: fileUrl,
+            copies: copies,
+            Cafe_name: location,
+            Created_at: new Date()
+          }
+        ])
+
+      if (insertError) {
+        console.error(insertError)
+        confirmation.textContent = "Database insert failed."
+        confirmation.className = "error"
+        return
+      }
+
+      // ✅ Success
+      confirmation.textContent = "File uploaded & order saved successfully!"
+      confirmation.className = "success"
+      form.reset()
+    })
+  </script>
+</body>
+</html>
